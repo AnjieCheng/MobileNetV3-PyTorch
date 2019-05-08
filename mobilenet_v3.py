@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 import math
 
 
@@ -21,7 +22,7 @@ class HardSigmoid(nn.Module):
 ACT_FNS = {
     'RE': nn.ReLU6(inplace=True),
     'HS': HardSwish(),
-    'HG': HardSigmoid(),
+    'HG': HardSigmoid()
 }
 
 def _make_divisible(v, divisor, min_value=None):
@@ -38,6 +39,19 @@ def conv_3x3_bn(inp, oup, stride, nl='RE'):
         nn.BatchNorm2d(oup),
         ACT_FNS[nl]
     )
+
+def conv_1x1(inp, oup, nl='RE', with_se=False):
+    if with_se:
+        return nn.Sequential(
+            nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
+            SqueezeAndExcite(oup, reduction=4),
+            ACT_FNS[nl]
+        )
+    else:
+        return nn.Sequential(
+            nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
+            ACT_FNS[nl]
+        )
 
 def conv_1x1_bn(inp, oup, nl='RE', with_se=False):
     if with_se:
@@ -90,7 +104,7 @@ class InvertedResidual(nn.Module):
         )
 
         self.dw = nn.Sequential(
-            nn.Conv2d(hidden_dim, hidden_dim, kernel, stride, 1, groups=hidden_dim, bias=False),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel, stride, kernel//2, groups=hidden_dim, bias=False),
             nn.BatchNorm2d(hidden_dim),
             ACT_FNS[nl],
         )
@@ -104,7 +118,7 @@ class InvertedResidual(nn.Module):
             nn.BatchNorm2d(oup),
         )
 
-        if with_se: # with squeeze and excite
+        if with_se: # with squeeze and excite 
             if expand_size == oup: # exp_ratio = 1
                 self.conv = nn.Sequential(
                     self.dw,
@@ -142,9 +156,9 @@ class MobileNetV3(nn.Module):
 
     # NOTE: [kernel, expansion, output, SE, NL, s]
     cfg = [(3,  16, 16, True,  'RE', 2),
-           (3,  72, 24, False, 'RE', 2),
+           (3,  72, 24, False, 'RE', 2),  
            (5,  88, 24, False, 'RE', 1),
-           (5,  96, 40, True,  'HS', 1),
+           (5,  96, 40, True,  'HS', 2),
            (5, 240, 40, True,  'HS', 1),
            (5, 240, 40, True,  'HS', 1),
            (5, 120, 48, True,  'HS', 1),
@@ -157,8 +171,9 @@ class MobileNetV3(nn.Module):
         super(MobileNetV3, self).__init__()
         # building first layer
         assert input_size % 32 == 0
-        input_channel = _make_divisible(32 * width_mult, 8)
-        layers = [conv_3x3_bn(3, input_channel, 2, nl='HS')]
+        input_channel = _make_divisible(16 * width_mult, 8)
+        self.conv0 = conv_3x3_bn(3, input_channel, 2, nl='HS')
+        layers = []
         # building inverted residual blocks
         block = InvertedResidual
         # for t, c, n, s in self.cfgs:
@@ -173,12 +188,13 @@ class MobileNetV3(nn.Module):
 
         self.avgpool = nn.AvgPool2d(input_size // 32, stride=1)
         output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 1280
-        self.conv2 = conv_1x1_bn(input_channel, output_channel, nl='HS', with_se=False)
+        self.conv2 = conv_1x1(input_channel, output_channel, nl='HS', with_se=False)
         self.classifier = nn.Linear(output_channel, num_classes)
 
         self._initialize_weights()
 
     def forward(self, x):
+        x = self.conv0(x)
         x = self.features(x)
         x = self.conv1(x)
         x = self.avgpool(x)
@@ -201,3 +217,8 @@ class MobileNetV3(nn.Module):
                 n = m.weight.size(1)
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+
+if __name__ == '__main__':
+    net = MobileNetV3()
+    x_image = Variable(torch.randn(1, 3, 224, 224))
+    y = net(x_image)
