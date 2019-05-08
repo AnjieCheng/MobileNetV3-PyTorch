@@ -19,9 +19,9 @@ class HardSigmoid(nn.Module):
         return (self.relu6(x+3)) / 6
 
 ACT_FNS = {
-    ['RE']: nn.ReLU6(inplace=True),
-    ['HS']: HardSwish,
-    ['HG']: HardSigmoid
+    'RE': nn.ReLU6(inplace=True),
+    'HS': HardSwish(),
+    'HG': HardSigmoid(),
 }
 
 def _make_divisible(v, divisor, min_value=None):
@@ -104,7 +104,7 @@ class InvertedResidual(nn.Module):
             nn.BatchNorm2d(oup),
         )
 
-        if with_se: # with squeeze and excite 
+        if with_se: # with squeeze and excite
             if expand_size == oup: # exp_ratio = 1
                 self.conv = nn.Sequential(
                     self.dw,
@@ -142,7 +142,7 @@ class MobileNetV3(nn.Module):
 
     # NOTE: [kernel, expansion, output, SE, NL, s]
     cfg = [(3,  16, 16, True,  'RE', 2),
-           (3,  72, 24, False, 'RE', 2),  
+           (3,  72, 24, False, 'RE', 2),
            (5,  88, 24, False, 'RE', 1),
            (5,  96, 40, True,  'HS', 1),
            (5, 240, 40, True,  'HS', 1),
