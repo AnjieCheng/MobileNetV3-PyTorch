@@ -157,7 +157,7 @@ class MobileNetV3(nn.Module):
     # NOTE: [kernel, expansion, output, SE, NL, s]
     cfg = [(3,  16, 16, True,  'RE', 2),
            (3,  72, 24, False, 'RE', 2),  
-           (5,  88, 24, False, 'RE', 1),
+           (3,  88, 24, False, 'RE', 1),
            (5,  96, 40, True,  'HS', 2),
            (5, 240, 40, True,  'HS', 1),
            (5, 240, 40, True,  'HS', 1),
